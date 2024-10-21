@@ -162,7 +162,6 @@ export const routes: Route[] = [
     category: RouteCategory.Featured,
     priority: 4,
     mobileNav: false,
-    disable: !getConfig().REACT_APP_FEATURE_FOX_PAGE,
   },
   {
     path: '/trade',
