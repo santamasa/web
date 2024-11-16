@@ -19,7 +19,6 @@ import axios from 'axios'
 import { getConfig } from 'config'
 import type { Address } from 'viem'
 import { zeroAddress } from 'viem'
-import type { ExpiryOption } from 'state/slices/limitOrderInputSlice/constants'
 
 import { BASE_RTK_CREATE_API_CONFIG } from '../const'
 import type { LimitOrderQuoteResponse } from './types'
@@ -44,13 +43,12 @@ export type LimitOrderQuoteParams = {
   sellAccountAddress: Address | undefined
   sellAmountCryptoBaseUnit: string
   recipientAddress: Address | undefined
-  expiry: ExpiryOption
 }
 
-export type QuoteLimitOrderResult = {
-  params: LimitOrderQuoteParams
-  response: LimitOrderQuoteResponse
-}
+// export type QuoteLimitOrderResult = {
+//   params: LimitOrderQuoteParams
+//   response: LimitOrderQuoteResponse
+// }
 
 export const limitOrderApi = createApi({
   ...BASE_RTK_CREATE_API_CONFIG,
@@ -58,7 +56,7 @@ export const limitOrderApi = createApi({
   keepUnusedDataFor: Number.MAX_SAFE_INTEGER, // never clear, we will manage this
   tagTypes: ['LimitOrder'],
   endpoints: build => ({
-    quoteLimitOrder: build.query<QuoteLimitOrderResult, LimitOrderQuoteParams>({
+    quoteLimitOrder: build.query<LimitOrderQuoteResponse, LimitOrderQuoteParams>({
       queryFn: async (params: LimitOrderQuoteParams) => {
         const {
           sellAssetId,
@@ -113,7 +111,7 @@ export const limitOrderApi = createApi({
           const response = axiosResponse.data
 
           // Both the params and the response are returned to provide complete information downstream without race conditions
-          return { data: { params, response } }
+          return { data: response }
         } catch (e) {
           const axiosError = e as AxiosError
 
