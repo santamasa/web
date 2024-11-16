@@ -39,6 +39,7 @@ import {
   selectUserSlippagePercentageDecimal,
 } from 'state/slices/limitOrderInputSlice/selectors'
 import { limitOrderSlice } from 'state/slices/limitOrderSlice/limitOrderSlice'
+import { selectActiveQuoteNetworkFeeUserCurrency } from 'state/slices/limitOrderSlice/selectors'
 import {
   selectIsAnyAccountMetadataLoadedForChainId,
   selectUserCurrencyToUsdRate,
@@ -95,6 +96,7 @@ export const LimitOrderInput = ({
   const hasUserEnteredAmount = useAppSelector(selectHasUserEnteredAmount)
   const isVotingPowerLoading = useAppSelector(selectIsVotingPowerLoading)
   const userCurrencyRate = useAppSelector(selectUserCurrencyToUsdRate)
+  const networkFeeUserCurrency = useAppSelector(selectActiveQuoteNetworkFeeUserCurrency)
 
   const {
     switchAssets,
@@ -384,7 +386,7 @@ export const LimitOrderInput = ({
         shouldDisablePreviewButton={isRecipientAddressEntryActive}
         swapperName={SwapperName.CowSwap}
         swapSource={SwapperName.CowSwap}
-        totalNetworkFeeFiatPrecision='0' // CoW protocol always zero network fee
+        totalNetworkFeeFiatPrecision={networkFeeUserCurrency}
         sellAsset={sellAsset}
       >
         {renderedRecipientAddress}
@@ -403,6 +405,7 @@ export const LimitOrderInput = ({
     isRecipientAddressEntryActive,
     sellAsset,
     renderedRecipientAddress,
+    networkFeeUserCurrency,
   ])
 
   return (
