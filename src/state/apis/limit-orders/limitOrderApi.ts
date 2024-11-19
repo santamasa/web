@@ -2,18 +2,28 @@ import { createApi } from '@reduxjs/toolkit/dist/query/react'
 import type { AssetId } from '@shapeshiftoss/caip'
 import { type ChainId, fromAssetId } from '@shapeshiftoss/caip'
 import type { CowSwapQuoteError } from '@shapeshiftoss/swapper'
-import {
-  CoWSwapOrderKind,
-  CowSwapQuoteErrorType,
-  CoWSwapSellTokenSource,
-  CoWSwapSigningScheme,
-  getCowswapNetwork,
-  TradeQuoteError,
-} from '@shapeshiftoss/swapper'
+import { CowSwapQuoteErrorType, getCowswapNetwork, TradeQuoteError } from '@shapeshiftoss/swapper'
 import {
   getAffiliateAppDataFragmentByChainId,
   getFullAppData,
 } from '@shapeshiftoss/swapper/dist/swappers/CowSwapper/utils/helpers/helpers'
+import type {
+  GetOrdersRequest,
+  Order,
+  OrderCancellation,
+  OrderStatus,
+  QuoteId,
+  Trade,
+} from '@shapeshiftoss/types/dist/cowSwap'
+import {
+  type OrderCreation,
+  type OrderQuoteRequest,
+  type OrderQuoteResponse,
+  OrderQuoteSideKindSell,
+  PriceQuality,
+  SellTokenSource,
+  SigningScheme,
+} from '@shapeshiftoss/types/dist/cowSwap'
 import type { AxiosError } from 'axios'
 import axios from 'axios'
 import { getConfig } from 'config'
@@ -21,18 +31,6 @@ import type { Address } from 'viem'
 import { zeroAddress } from 'viem'
 
 import { BASE_RTK_CREATE_API_CONFIG } from '../const'
-import type { LimitOrderQuoteResponse } from './types'
-import {
-  type CancelLimitOrdersRequest,
-  type CompetitionOrderStatus,
-  type GetOrdersRequest,
-  type LimitOrder,
-  type LimitOrderId,
-  type LimitOrderQuoteRequest,
-  type Order,
-  PriceQuality,
-  type Trade,
-} from './types'
 
 export type LimitOrderQuoteParams = {
   sellAssetId: AssetId
@@ -45,18 +43,13 @@ export type LimitOrderQuoteParams = {
   recipientAddress: Address | undefined
 }
 
-// export type QuoteLimitOrderResult = {
-//   params: LimitOrderQuoteParams
-//   response: LimitOrderQuoteResponse
-// }
-
 export const limitOrderApi = createApi({
   ...BASE_RTK_CREATE_API_CONFIG,
   reducerPath: 'limitOrderApi',
   keepUnusedDataFor: Number.MAX_SAFE_INTEGER, // never clear, we will manage this
   tagTypes: ['LimitOrder'],
   endpoints: build => ({
-    quoteLimitOrder: build.query<LimitOrderQuoteResponse, LimitOrderQuoteParams>({
+    quoteLimitOrder: build.query<OrderQuoteResponse, LimitOrderQuoteParams>({
       queryFn: async (params: LimitOrderQuoteParams) => {
         const {
           sellAssetId,
@@ -85,16 +78,16 @@ export const limitOrderApi = createApi({
           'limit',
         )
 
-        const limitOrderQuoteRequest: LimitOrderQuoteRequest = {
-          sellToken: fromAssetId(sellAssetId).assetReference,
-          buyToken: fromAssetId(buyAssetId).assetReference,
+        const limitOrderQuoteRequest: OrderQuoteRequest = {
+          sellToken: fromAssetId(sellAssetId).assetReference as Address,
+          buyToken: fromAssetId(buyAssetId).assetReference as Address,
           receiver: recipientAddress,
-          sellTokenBalance: CoWSwapSellTokenSource.ERC20,
+          sellTokenBalance: SellTokenSource.ERC20,
           from: sellAccountAddress ?? zeroAddress, // Zero address used to enable quotes without wallet connected
-          priceQuality: PriceQuality.Optimal,
-          signingScheme: CoWSwapSigningScheme.EIP712,
-          onChainOrder: undefined,
-          kind: CoWSwapOrderKind.Sell,
+          priceQuality: PriceQuality.OPTIMAL,
+          signingScheme: SigningScheme.EIP712,
+          onchainOrder: undefined,
+          kind: OrderQuoteSideKindSell.SELL,
           sellAmountBeforeFee: sellAmountCryptoBaseUnit,
           appData,
           appDataHash,
@@ -104,7 +97,7 @@ export const limitOrderApi = createApi({
         limitOrderQuoteRequest.appDataHash = appDataHash
 
         try {
-          const axiosResponse = await axios.post<LimitOrderQuoteResponse>(
+          const axiosResponse = await axios.post<OrderQuoteResponse>(
             `${baseUrl}/${network}/api/v1/quote/`,
             limitOrderQuoteRequest,
           )
@@ -119,6 +112,7 @@ export const limitOrderApi = createApi({
 
           const errorData = (() => {
             switch (maybeCowSwapError?.errorType) {
+              // NOTE we are using our own CowSwapQuoteError because
               case CowSwapQuoteErrorType.ZeroAmount:
                 return TradeQuoteError.SellAmountBelowMinimum
               case CowSwapQuoteErrorType.SellAmountDoesNotCoverFee:
@@ -134,25 +128,19 @@ export const limitOrderApi = createApi({
         }
       },
     }),
-    placeLimitOrder: build.mutation<LimitOrderId, { limitOrder: LimitOrder; chainId: ChainId }>({
+    placeLimitOrder: build.mutation<QuoteId, { limitOrder: OrderCreation; chainId: ChainId }>({
       queryFn: async ({ limitOrder, chainId }) => {
         const config = getConfig()
         const baseUrl = config.REACT_APP_COWSWAP_BASE_URL
         const maybeNetwork = getCowswapNetwork(chainId)
         if (maybeNetwork.isErr()) throw maybeNetwork.unwrapErr()
         const network = maybeNetwork.unwrap()
-        const result = await axios.post<LimitOrderId>(
-          `${baseUrl}/${network}/api/v1/orders/`,
-          limitOrder,
-        )
+        const result = await axios.post<QuoteId>(`${baseUrl}/${network}/api/v1/orders/`, limitOrder)
         const order = result.data
         return { data: order }
       },
     }),
-    cancelLimitOrders: build.mutation<
-      boolean,
-      { payload: CancelLimitOrdersRequest; chainId: ChainId }
-    >({
+    cancelLimitOrders: build.mutation<boolean, { payload: OrderCancellation; chainId: ChainId }>({
       queryFn: async ({ payload, chainId }) => {
         const config = getConfig()
         const baseUrl = config.REACT_APP_COWSWAP_BASE_URL
@@ -166,17 +154,14 @@ export const limitOrderApi = createApi({
         return { data: result.status === 200 }
       },
     }),
-    getOrderStatus: build.query<
-      CompetitionOrderStatus,
-      { orderId: LimitOrderId; chainId: ChainId }
-    >({
+    getOrderStatus: build.query<OrderStatus, { orderId: QuoteId; chainId: ChainId }>({
       queryFn: async ({ orderId, chainId }) => {
         const config = getConfig()
         const baseUrl = config.REACT_APP_COWSWAP_BASE_URL
         const maybeNetwork = getCowswapNetwork(chainId)
         if (maybeNetwork.isErr()) throw maybeNetwork.unwrapErr()
         const network = maybeNetwork.unwrap()
-        const result = await axios.get<CompetitionOrderStatus>(
+        const result = await axios.get<OrderStatus>(
           `${baseUrl}/${network}/api/v1/orders/${orderId}/status`,
         )
         return { data: result.data }
@@ -195,11 +180,11 @@ export const limitOrderApi = createApi({
         return { data: result.data }
       },
     }),
-    getOrders: build.query<Order[], { payload: GetOrdersRequest }>({
-      queryFn: async ({ payload }) => {
+    getOrders: build.query<Order[], { payload: GetOrdersRequest; chainId: ChainId }>({
+      queryFn: async ({ payload, chainId }) => {
         const config = getConfig()
         const baseUrl = config.REACT_APP_COWSWAP_BASE_URL
-        const maybeNetwork = getCowswapNetwork(payload.chainId)
+        const maybeNetwork = getCowswapNetwork(chainId)
         if (maybeNetwork.isErr()) throw maybeNetwork.unwrapErr()
         const network = maybeNetwork.unwrap()
         const result = await axios.post<Order[]>(
@@ -212,4 +197,4 @@ export const limitOrderApi = createApi({
   }),
 })
 
-export const { useQuoteLimitOrderQuery } = limitOrderApi
+export const { useQuoteLimitOrderQuery, usePlaceLimitOrderMutation } = limitOrderApi
